@@ -118,7 +118,7 @@ case class Snippet[T](code: () => T,
  *  - the `eval` boolean indicating if a snippet must be evaluated
  *  - the `verify` function checking the result
  */
-case class SnippetParams[T]( 
+case class SnippetParams[T](
   trimExpression: String => String   = trimApproximatedSnippet,
   cutter: String => String           = ScissorsCutter(),
   asCode: (String, String) => String = markdownCode(offset = 0),
@@ -203,4 +203,3 @@ object Snippet {
   lazy val ls = "[ \t\\x0B\f]"
   lazy val parameters = "(\\([^\\)]+\\))*"
 }
-

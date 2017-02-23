@@ -1,7 +1,6 @@
 package org.specs2
 
 import org.specs2.execute.Typecheck._
-import org.specs2.execute._
 import org.specs2.matcher._
 import org.specs2.mock.Mockito
 

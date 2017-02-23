@@ -24,3 +24,4 @@ resolvers += Resolver.url("ambiata-oss", new URL("https://ambiata-oss.s3.amazona
 
 resolvers += "Era7 maven releases" at "http://releases.era7.com.s3.amazonaws.com"
 
+addSbtPlugin("org.scala-js" % "sbt-scalajs" % "0.6.14")

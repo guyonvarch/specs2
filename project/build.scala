@@ -22,23 +22,32 @@ import SonatypeKeys._
 import depends._
 import com.ambiata.promulgate.project.ProjectPlugin._
 
+import org.scalajs.sbtplugin.ScalaJSPlugin
+import org.scalajs.sbtplugin.cross._, CrossProject._
+
 object build extends Build {
   type Settings = Def.Setting[_]
 
   /** MAIN PROJECT */
-  lazy val specs2 = Project(
-    id = "specs2",
-    base = file("."),
-    settings =
-      moduleSettings("")       ++
-      compatibilitySettings    ++
-      releaseSettings          ++
-      siteSettings             ++
-      Seq(name := "specs2", packagedArtifacts := Map.empty)
-  ).aggregate(
-    common, matcher, matcherExtra, core, cats, scalaz, html, analysis,
-    shapeless, form, markdown, gwt, junit, scalacheck, mock, tests)
-   .enablePlugins(GitBranchPrompt)
+  lazy val specs2 =
+    Project(
+      id = "specs2",
+      base = file("."),
+      settings =
+        moduleSettings("")       ++
+        compatibilitySettings    ++
+        releaseSettings          ++
+        siteSettings             ++
+        Seq(name := "specs2", packagedArtifacts := Map.empty)
+    ).aggregate(
+      shapelessJVM, markdownJVM, commonJVM, matcherJVM, matcherExtraJVM,
+      scalazJVM, mockJVM, scalacheckJVM, catsJVM, formJVM, htmlJVM,
+      analysisJVM, gwtJVM, junitJVM, testsJVM, coreJVM
+    ).aggregate(
+      shapelessJS, markdownJS, commonJS, matcherJS, matcherExtraJS,
+      scalazJS, mockJS, scalacheckJS, catsJS, formJS, htmlJS,
+      analysisJS, gwtJS, junitJS, testsJS, coreJS
+    ).enablePlugins(GitBranchPrompt, ScalaJSPlugin)
 
   /** COMMON SETTINGS */
   lazy val specs2Settings: Seq[Settings] = Seq(
@@ -62,16 +71,33 @@ object build extends Build {
       publicationSettings
 
   /** MODULES (sorted in alphabetical order) */
-  lazy val analysis = Project(id = "analysis", base = file("analysis"),
-    settings = Seq(
-      libraryDependencies ++= depends.classycle ++ depends.compiler(scalaVersion.value)) ++
-    moduleSettings("analysis") ++
-    Seq(name := "specs2-analysis")
-  ).dependsOn(common % "test->test", core, matcher, scalacheck % "test")
+  lazy val analysis =
+    CrossProject(id = "analysis", base = file("analysis"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("analysis") ++
+        Seq(
+          name := "specs2-analysis",
+          libraryDependencies ++=
+            depends.classycle ++
+            depends.compiler(scalaVersion.value)
+        )
+      ).dependsOn(
+        common % "test->test",
+        core,
+        matcher,
+        scalacheck % "test"
+      )
 
-  lazy val common = Project(id = "common", base = file("common"),
-    settings = moduleSettings("common") ++
-      Seq(conflictWarning ~= { _.copy(failOnConflict = false) }, // lame
+  lazy val analysisJVM = analysis.jvm
+  lazy val analysisJS = analysis.js
+
+  lazy val common =
+    CrossProject(id = "common", base = file("common"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("common") ++
+        Seq(
+          name := "specs2-common",
+          conflictWarning ~= { _.copy(failOnConflict = false) }, // lame
           libraryDependencies ++=
             depends.scalaz(scalazVersion.value) ++
             depends.reflect(scalaVersion.value) ++
@@ -79,128 +105,235 @@ object build extends Build {
             depends.scalaParser(scalaVersion.value) ++
             depends.scalaXML(scalaVersion.value) ++
             depends.scalacheck(scalaVersion.value).map(_ % "test") ++
-            depends.si2712Dependency(scalaVersion.value),
-        name := "specs2-common"
+            depends.si2712Dependency(scalaVersion.value)
+        )
       )
-  )
 
-  lazy val core = Project(id = "core", base = file("core"),
-    settings = Seq(
-      libraryDependencies ++=
-        depends.paradise(scalaVersion.value) ++
-        depends.testInterface.map(_ % "optional") ++
-        depends.mockito.map(_ % "test") ++
-        depends.junit.map(_ % "test")) ++
-      moduleSettings("core") ++
-      Seq(name := "specs2-core")
-  ).dependsOn(matcher, common % "test->test")
+  lazy val commonJVM = common.jvm
+  lazy val commonJS = common.js
 
-  lazy val examples = Project(id = "examples", base = file("examples"),
-    settings = moduleSettings("examples") ++
-      Seq(name := "specs2-examples")
-  ).dependsOn(common, matcher, matcherExtra, core, analysis, form, html, markdown, gwt, junit, scalacheck, mock)
+  lazy val core =
+    CrossProject(id = "core", base = file("core"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("core") ++
+        Seq(
+          name := "specs2-core",
+          libraryDependencies ++=
+            depends.paradise(scalaVersion.value) ++
+            depends.testInterface.map(_ % "optional") ++
+            depends.mockito.map(_ % "test") ++
+            depends.junit.map(_ % "test")
+        )
+      ).dependsOn(matcher, common % "test->test")
 
-  lazy val form = Project(id = "form", base = file("form"),
-    settings = moduleSettings("form") ++
-      Seq(name := "specs2-form")
-  ).dependsOn(core, markdown, matcherExtra, scalacheck % "test->test")
+  lazy val coreJVM = core.jvm
+  lazy val coreJS = core.js
 
-  lazy val guide = Project(id = "guide", base = file("guide"),
-    settings = moduleSettings("guide") ++
-      Seq(name := "specs2-guide") ++
-      documentationSettings
-  ).dependsOn(examples % "compile->compile;test->test", scalaz, shapeless)
-
-  lazy val gwt = Project(id = "gwt", base = file("gwt"),
-    settings = Seq(
-      libraryDependencies ++= depends.shapeless(scalaVersion.value)) ++
-      moduleSettings("gwt") ++
-      Seq(name := "specs2-gwt")
-  ).dependsOn(core, matcherExtra, scalacheck)
-
-  lazy val html = Project(id = "html", base = file("html"),
-    settings =
-      Seq(libraryDependencies += depends.tagsoup) ++
-      moduleSettings("html") ++
-      Seq(name := "specs2-html")
-  ).dependsOn(form, mock % "test", matcherExtra % "test", scalacheck % "test")
-
-  lazy val junit = Project(id = "junit", base = file("junit"),
-    settings = Seq(
-      libraryDependencies ++= depends.junit ++ depends.mockito.map(_ % "test")) ++
-      moduleSettings("junit") ++
-      Seq(name := "specs2-junit")
-  ).dependsOn(core, matcherExtra % "test", mock % "test")
-
-  lazy val markdown = Project(id = "markdown", base = file("markdown"),
-    settings = Seq(
-     libraryDependencies ++= depends.pegdown) ++
-      moduleSettings("markdown") ++
-      Seq(name := "specs2-markdown")
-  ).dependsOn(common, core % "compile->test")
-
-  lazy val matcher = Project(id = "matcher", base = file("matcher"),
-    settings = moduleSettings("matcher") ++
-      Seq(name := "specs2-matcher")
-  ).dependsOn(common)
-
-  lazy val matcherExtra = Project(id = "matcher-extra", base = file("matcher-extra"),
-    settings = moduleSettings("matcherextra") ++ Seq(
-      name := "specs2-matcher-extra",
-      libraryDependencies ++= depends.paradise(scalaVersion.value)
-    )
-  ).dependsOn(analysis, matcher, core % "test->test")
-
-  lazy val shapeless = Project(id = "shapeless", base = file("shapeless"),
-    settings = moduleSettings("shapeless") ++
-      Seq(name := "specs2-shapeless",
-        libraryDependencies ++=
-          depends.paradise(scalaVersion.value) ++
-          depends.shapeless(scalaVersion.value)
+  lazy val examples =
+    CrossProject(id = "examples", base = file("examples"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("examples") ++
+        Seq(name := "specs2-examples")
+      ).dependsOn(
+        common, matcher, matcherExtra, core, analysis, form, html, markdown, gwt,
+        junit, scalacheck, mock
       )
-  ).dependsOn(matcher)
 
-  lazy val cats = Project(id = "cats", base = file("cats"),
-    settings = moduleSettings("cats") ++
-      Seq(libraryDependencies ++= (
-        if (scalaMinorVersionAtLeast(scalaVersion.value, 12))
-          Seq()
-        else
-          depends.cats)) ++
-      Seq(name := "specs2-cats") ++
-      Seq((skip in compile) := scalaMinorVersionAtLeast(scalaVersion.value, 12),
-          publishArtifact := !scalaMinorVersionAtLeast(scalaVersion.value, 12))
-  ).dependsOn(matcher, core % "test->test")
+  lazy val examplesJVM = examples.jvm
+  lazy val examplesJS = examples.js
 
-  lazy val scalaz = Project(id = "scalaz", base = file("scalaz"),
-    settings = moduleSettings("scalaz") ++
-      Seq(libraryDependencies ++= depends.scalaz(scalazVersion.value) ++ depends.scalazConcurrent(scalazVersion.value)) ++
-      Seq(name := "specs2-scalaz")
-  ).dependsOn(matcher, core % "test->test")
+  lazy val form =
+    CrossProject(id = "form", base = file("form"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("form") ++
+        Seq(name := "specs2-form")
+      ).dependsOn(core, markdown, matcherExtra, scalacheck % "test->test")
 
-  lazy val mock = Project(id = "mock", base = file("mock"),
-    settings = Seq(
-      libraryDependencies ++=
-        depends.hamcrest ++
-        depends.mockito) ++
-      moduleSettings("mock") ++
-      Seq(name := "specs2-mock")
-  ).dependsOn(core)
+  lazy val formJVM = form.jvm
+  lazy val formJS = form.js
 
-  lazy val scalacheck = Project(id = "scalacheck", base = file("scalacheck"),
-    settings = Seq(
-      libraryDependencies ++= depends.scalacheck(scalaVersion.value)) ++
-      moduleSettings("scalacheck") ++
-      Seq(name := "specs2-scalacheck")
-  ).dependsOn(core)
+  lazy val guide =
+    CrossProject(id = "guide", base = file("guide"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("guide") ++
+        Seq(name := "specs2-guide") ++
+        documentationSettings
+      ).dependsOn(examples % "compile->compile;test->test", scalaz, shapeless)
 
-  lazy val tests = Project(id = "tests", base = file("tests"),
-    settings = moduleSettings("tests") ++
-      Seq(name := "specs2-tests")
-  ).dependsOn(
-    core % "compile->compile;test->test", shapeless % "compile->compile;test->test",
-    junit % "test->test", examples % "test->test",
-    matcherExtra, html, scalaz)
+  lazy val guideJVM = guide.jvm
+  lazy val guideJS = guide.js
+
+  lazy val gwt =
+    CrossProject(id = "gwt", base = file("gwt"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("gwt") ++
+        Seq(
+          name := "specs2-gwt",
+          libraryDependencies ++= depends.shapeless(scalaVersion.value)
+        )
+      ).dependsOn(core, matcherExtra, scalacheck)
+
+  lazy val gwtJVM = gwt.jvm
+  lazy val gwtJS = gwt.js
+
+  lazy val html =
+    CrossProject(id = "html", base = file("html"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("html") ++
+        Seq(
+          name := "specs2-html",
+          libraryDependencies += depends.tagsoup
+        )
+      ).dependsOn(form, mock % "test", matcherExtra % "test", scalacheck % "test")
+
+  lazy val htmlJVM = html.jvm
+  lazy val htmlJS = html.js
+
+  lazy val junit =
+    CrossProject(id = "junit", base = file("junit"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("junit") ++
+        Seq(
+          name := "specs2-junit",
+          libraryDependencies ++=
+            depends.junit ++
+            depends.mockito.map(_ % "test")
+        )
+      ).dependsOn(core, matcherExtra % "test", mock % "test")
+
+  lazy val junitJVM = junit.jvm
+  lazy val junitJS = junit.js
+
+  lazy val markdown =
+    CrossProject(id = "markdown", base = file("markdown"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("markdown") ++
+        Seq(
+          name := "specs2-markdown",
+          libraryDependencies ++= depends.pegdown
+        )
+      ).dependsOn(common, core % "compile->test")
+
+  lazy val markdownJVM = markdown.jvm
+  lazy val markdownJS = markdown.js
+
+  lazy val matcher =
+    CrossProject(id = "matcher", base = file("matcher"), crossType = CrossType.Pure)
+      .settings(moduleSettings("matcher") ++ Seq(name := "specs2-matcher"))
+      .dependsOn(common)
+
+  lazy val matcherJVM = matcher.jvm
+  lazy val matcherJS = matcher.js
+
+  lazy val matcherExtra =
+    CrossProject(id = "matcher-extra", base = file("matcher-extra"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("matcherextra") ++ Seq(
+          name := "specs2-matcher-extra",
+          libraryDependencies ++= depends.paradise(scalaVersion.value)
+        )
+      ).dependsOn(analysis, matcher, core % "test->test")
+
+  lazy val matcherExtraJVM = matcherExtra.jvm
+  lazy val matcherExtraJS = matcherExtra.js
+
+  lazy val shapeless =
+    CrossProject(id = "shapeless", base = file("shapeless"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("shapeless") ++
+        Seq(
+          name := "specs2-shapeless",
+          libraryDependencies ++=
+            depends.paradise(scalaVersion.value) ++
+            depends.shapeless(scalaVersion.value)
+        )
+      ).dependsOn(matcher)
+
+  lazy val shapelessJVM = shapeless.jvm
+  lazy val shapelessJS = shapeless.js
+
+  lazy val cats =
+    CrossProject(id = "cats", base = file("cats"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("cats") ++
+        Seq(
+          name := "specs2-cats",
+          libraryDependencies ++= (
+            if (scalaMinorVersionAtLeast(scalaVersion.value, 12))
+              Seq()
+            else
+              depends.cats
+          )
+        ) ++
+        Seq(
+          (skip in compile) := scalaMinorVersionAtLeast(scalaVersion.value, 12),
+          publishArtifact := !scalaMinorVersionAtLeast(scalaVersion.value, 12)
+        )
+      ).dependsOn(matcher, core % "test->test")
+
+  lazy val catsJVM = cats.jvm
+  lazy val catsJS = cats.js
+
+  lazy val scalaz =
+    CrossProject(id = "scalaz", base = file("scalaz"), crossType = CrossType.Full)
+      .settings(
+        moduleSettings("scalaz") ++
+        Seq(
+          name := "specs2-scalaz",
+          libraryDependencies ++=
+            depends.scalaz(scalazVersion.value) ++
+            depends.scalazConcurrent(scalazVersion.value)
+        )
+      ).dependsOn(matcher, core % "test->test")
+
+  lazy val scalazJVM = scalaz.jvm
+  lazy val scalazJS = scalaz.js
+
+  lazy val mock =
+    CrossProject(id = "mock", base = file("mock"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("mock") ++ Seq(
+          name := "specs2-mock",
+          libraryDependencies ++=
+            depends.hamcrest ++
+            depends.mockito
+        )
+      ).dependsOn(core)
+
+  lazy val mockJVM = mock.jvm
+  lazy val mockJS = mock.js
+
+  lazy val scalacheck =
+    CrossProject(id = "scalacheck", base = file("scalacheck"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("scalacheck") ++
+        Seq(
+          name := "specs2-scalacheck",
+          libraryDependencies ++=
+            depends.scalacheck(scalaVersion.value)
+        )
+      ).dependsOn(core)
+
+  lazy val scalacheckJVM = scalacheck.jvm
+  lazy val scalacheckJS = scalacheck.js
+
+  lazy val tests =
+    CrossProject(id = "tests", base = file("tests"), crossType = CrossType.Pure)
+      .settings(
+        moduleSettings("tests") ++
+        Seq(name := "specs2-tests")
+      ).dependsOn(
+        core % "compile->compile;test->test",
+        shapeless % "compile->compile;test->test",
+        junit % "test->test",
+        examples % "test->test",
+        matcherExtra,
+        html,
+        scalaz
+      )
+
+  lazy val testsJVM = tests.jvm
+  lazy val testsJS = tests.js
 
   lazy val specs2ShellPrompt = shellPrompt in ThisBuild := { state =>
     val name = Project.extract(state).currentRef.project
@@ -213,16 +346,35 @@ object build extends Build {
     else if (scalaBinaryVersion.startsWith("2.11"))
       "2.11"
     else
-      "2.12.0-RCx"
+      "2.12"
 
   lazy val compilationSettings: Seq[Settings] = Seq(
     // https://gist.github.com/djspiewak/976cd8ac65e20e136f05
-    unmanagedSourceDirectories in Compile ++=
-      Seq((sourceDirectory in Compile).value / s"scala-${scalaSourceVersion(scalaBinaryVersion.value)}",
-          if (scalazVersion.value.startsWith("7.0")) (sourceDirectory in Compile).value / s"scala-scalaz-7.0.x"
-          else                                       (sourceDirectory in Compile).value / s"scala-scalaz-7.1.x",
-          if (scalazVersion.value.startsWith("7.0")) (sourceDirectory in (Test, test)).value / s"scala-scalaz-7.0.x"
-          else                                       (sourceDirectory in (Test, test)).value / s"scala-scalaz-7.1.x"),
+    unmanagedSourceDirectories in Compile ++= {
+      val shared: Option[File] = Some(
+        (baseDirectory in Compile).value.getParentFile / "shared" / "src" / "main"
+      ).filter(_.exists)
+
+      val compileBases = (sourceDirectory in Compile).value :: shared.toList
+
+      val extraDirs = compileBases.map {
+        _ / s"scala-${scalaSourceVersion(scalaBinaryVersion.value)}"
+      }
+
+      val scalazDirs =
+        if (scalazVersion.value.startsWith("7.0"))
+          compileBases.map { _ / s"scala-scalaz-7.0.x" }
+        else
+          compileBases.map { _ / s"scala-scalaz-7.1.x" }
+
+      val testDep =
+        if (scalazVersion.value.startsWith("7.0"))
+          (sourceDirectory in (Test, test)).value / s"scala-scalaz-7.0.x"
+        else
+          (sourceDirectory in (Test, test)).value / s"scala-scalaz-7.1.x"
+
+      extraDirs ++ scalazDirs :+ testDep
+    },
     javacOptions ++= Seq("-Xmx3G", "-Xms512m", "-Xss4m"),
     maxErrors := 20,
     incOptions := incOptions.value.withNameHashing(true),
@@ -255,8 +407,8 @@ object build extends Build {
     logBuffered := false,
     cancelable in Global := true,
     testFrameworks := Seq(TestFramework("org.specs2.runner.Specs2Framework")),
-    javaOptions ++= Seq("-Xmx3G", "-Xss4M"),
-    fork in (ThisBuild, Test) := true,
+    // javaOptions ++= Seq("-Xmx3G", "-Xss4M"),
+    //fork in (ThisBuild, Test) := true,
     testOptions := Seq(Tests.Filter(s =>
       (Seq(".guide.").exists(s.contains) || Seq("Spec", "Guide", "Website").exists(s.endsWith)) &&
         Seq("Specification", "FeaturesSpec").forall(n => !s.endsWith(n))))
@@ -266,56 +418,71 @@ object build extends Build {
    * RELEASE PROCESS
    */
   lazy val releaseSettings: Seq[Settings] =
-    ReleasePlugin.releaseSettings ++ Seq(
-    tagName := "SPECS2-" + (version in ThisBuild).value,
-    crossBuild := true,
-    releaseProcess := Seq[ReleaseStep](
-      checkSnapshotDependencies,
-      tagRelease,
-      generateWebsite,
-      executeStepTask(makeSite, "make the site", Compile),
-      publishSite,
-      ReleaseStep(publishSignedArtifacts, check = identity, enableCrossBuild = true),
-      releaseToSonatype,
-      pushChanges
-    ),
-    releaseJarsProcess := Seq[ReleaseStep](
-      inquireVersions,
-      setReleaseVersion,
-      ReleaseStep(publishSignedArtifacts, check = identity, enableCrossBuild = true),
-      releaseToSonatype
-    ),
-    releaseOfficialProcess := Seq[ReleaseStep](
-      checkSnapshotDependencies,
-      inquireVersions,
-      setReleaseVersion,
-      tagRelease,
-      generateWebsite,
-      executeStepTask(makeSite, "make the site", Compile),
-      publishSite,
-      ReleaseStep(publishSignedArtifacts, check = identity, enableCrossBuild = true),
-      releaseToSonatype,
-      notifyHerald,
-      pushChanges
-    ),
-    releaseSiteProcess := Seq[ReleaseStep](
-      inquireVersions,
-      setReleaseVersion,
-      generateWebsite,
-      executeStepTask(makeSite, "make the site", Compile),
-      publishSite
-    ),
-    commands ++= Seq(releaseOfficialCommand, releaseJarsCommand, releaseSiteCommand)
+    ReleasePlugin.releaseSettings ++
+    Seq(
+      tagName := "SPECS2-" + (version in ThisBuild).value,
+      crossBuild := true,
+      releaseProcess := Seq[ReleaseStep](
+        checkSnapshotDependencies,
+        tagRelease,
+        generateWebsite,
+        executeStepTask(makeSite, "make the site", Compile),
+        publishSite,
+        ReleaseStep(publishSignedArtifacts, check = identity, enableCrossBuild = true),
+        releaseToSonatype,
+        pushChanges
+      ),
+      releaseJarsProcess := Seq[ReleaseStep](
+        inquireVersions,
+        setReleaseVersion,
+        ReleaseStep(publishSignedArtifacts, check = identity, enableCrossBuild = true),
+        releaseToSonatype
+      ),
+      releaseOfficialProcess := Seq[ReleaseStep](
+        checkSnapshotDependencies,
+        inquireVersions,
+        setReleaseVersion,
+        tagRelease,
+        generateWebsite,
+        executeStepTask(makeSite, "make the site", Compile),
+        publishSite,
+        ReleaseStep(publishSignedArtifacts, check = identity, enableCrossBuild = true),
+        releaseToSonatype,
+        notifyHerald,
+        pushChanges
+      ),
+      releaseSiteProcess := Seq[ReleaseStep](
+        inquireVersions,
+        setReleaseVersion,
+        generateWebsite,
+        executeStepTask(makeSite, "make the site", Compile),
+        publishSite
+      ),
+      commands ++= Seq(releaseOfficialCommand, releaseJarsCommand, releaseSiteCommand)
     ) ++
-  documentationSettings ++
-  apiSettings               ++
-  Seq(scalacOptions in (Compile, doc) += "-Ymacro-no-expand") ++
-  Seq(sources in (Compile, doc) in common :=
-        (if (!scalaMinorVersionAtLeast(scalaVersion.value, 11))
-           List()
-         else (sources in (Compile, doc) in common).value),
-    sources in (Compile, doc) in core := List(),
-    sources in (Compile, doc) in matcherExtra := List())
+    documentationSettings ++
+    apiSettings ++
+    Seq(scalacOptions in (Compile, doc) += "-Ymacro-no-expand") ++
+    Seq(
+      sources in (Compile, doc) in commonJVM := (
+        if (!scalaMinorVersionAtLeast(scalaVersion.value, 11)) {
+          List()
+        } else {
+          (sources in (Compile, doc) in commonJVM).value
+        }
+      ),
+      sources in (Compile, doc) in commonJS := (
+        if (!scalaMinorVersionAtLeast(scalaVersion.value, 11)) {
+          List()
+        } else {
+          (sources in (Compile, doc) in commonJS).value
+        }
+      ),
+      sources in (Compile, doc) in coreJVM := List(),
+      sources in (Compile, doc) in coreJS := List(),
+      sources in (Compile, doc) in matcherExtraJVM := List(),
+      sources in (Compile, doc) in matcherExtraJS := List()
+    )
 
   lazy val apiSettings: Seq[Settings] = Seq(
     sources                      in (Compile, doc) := sources.all(aggregateCompile).value.flatten,
@@ -326,12 +493,26 @@ object build extends Build {
   )
 
   lazy val aggregateCompile = ScopeFilter(
-    inProjects(common, matcher, matcherExtra, core, html, analysis, form, markdown, gwt, junit, scalacheck, mock),
-    inConfigurations(Compile))
+    inProjects(
+      commonJVM, matcherJVM, matcherExtraJVM, coreJVM, htmlJVM, analysisJVM,
+      formJVM, markdownJVM, gwtJVM, junitJVM, scalacheckJVM, mockJVM,
+      commonJS, matcherJS, matcherExtraJS, coreJS, htmlJS, analysisJS,
+      formJS, markdownJS, gwtJS, junitJS, scalacheckJS, mockJS
+    ),
+    inConfigurations(Compile)
+  )
 
   lazy val aggregateTest = ScopeFilter(
-    inProjects(common, matcher, matcherExtra, core, html, analysis, form, markdown, gwt, junit, scalacheck, mock, guide, examples),
-    inConfigurations(Test))
+    inProjects(
+      commonJVM, matcherJVM, matcherExtraJVM, coreJVM, htmlJVM, analysisJVM,
+      formJVM, markdownJVM, gwtJVM, junitJVM, scalacheckJVM, mockJVM, guideJVM,
+      examplesJVM,
+      commonJS, matcherJS, matcherExtraJS, coreJS, htmlJS, analysisJS,
+      formJS, markdownJS, gwtJS, junitJS, scalacheckJS, mockJS, guideJS,
+      examplesJS
+    ),
+    inConfigurations(Test)
+  )
 
   lazy val releaseOfficialProcess = SettingKey[Seq[ReleaseStep]]("release-official-process")
   private lazy val releaseOfficialCommandKey = "release-official"
@@ -415,7 +596,7 @@ object build extends Build {
     testTaskDefinition(generateWebsiteTask, Seq(Tests.Filter(_.endsWith("Website"))))
 
   lazy val generateWebsiteTask = TaskKey[Tests.Output]("generate-website", "generate the website")
-  lazy val generateWebsite     = executeStepTask(generateWebsiteTask in guide, "Generating the website", Test)
+  lazy val generateWebsite     = executeStepTask(generateWebsiteTask in guideJVM, "Generating the website", Test)
 
   lazy val publishSite = ReleaseStep { st: State =>
     val st2 = executeStepTask(makeSite, "Making the site")(st)
@@ -562,5 +743,3 @@ object build extends Build {
   }
 
 }
-
-
